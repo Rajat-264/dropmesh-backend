@@ -4,7 +4,7 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const dotenv = require('dotenv');
 
-dotenv.config(); // Load .env if available
+dotenv.config(); 
 
 const app = express();
 const server = http.createServer(app);
@@ -12,7 +12,7 @@ const server = http.createServer(app);
 // === Setup CORS ===
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://your-frontend-domain.com', // ✅ Replace with your deployed frontend URL
+  'https://dropmesh-frontend.onrender.com', // 
 ];
 
 app.use(cors({
@@ -25,10 +25,12 @@ app.use(cors({
 
 app.use(express.json());
 
-// === In-memory Device Store ===
+app.get('/api/network-info', (req, res) => {
+  res.json({ time: new Date().toISOString() });
+});
+
 const devices = new Map();
 
-// === Socket.IO Setup ===
 const io = socketIo(server, {
   cors: {
     origin: allowedOrigins,
@@ -83,12 +85,10 @@ io.on('connection', (socket) => {
   });
 });
 
-// === Routes (Optional health check) ===
 app.get('/', (req, res) => {
   res.send('🌍 DropMesh backend is running');
 });
 
-// === Server Listen on 0.0.0.0 ===
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
