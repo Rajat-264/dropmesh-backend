@@ -2,78 +2,46 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
-const os = require('os');
+const dotenv = require('dotenv');
+
+dotenv.config(); // Load .env if available
 
 const app = express();
 const server = http.createServer(app);
 
-function getLocalIp() {
-  const interfaces = os.networkInterfaces();
-  const preferred = [];
+// === Setup CORS ===
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://your-frontend-domain.com', // ✅ Replace with your deployed frontend URL
+];
 
-  for (const [name, iface] of Object.entries(interfaces)) {
-    if (
-      name.toLowerCase().includes('loopback') ||
-      name.toLowerCase().includes('vmware') ||
-      name.toLowerCase().includes('virtual') ||
-      name.toLowerCase().includes('vbox') ||
-      name.toLowerCase().includes('wsl') ||
-      name.toLowerCase().includes('docker')
-    ) {
-      continue;
-    }
-    for (const config of iface) {
-      if (config.family === 'IPv4' && !config.internal) {
-        if (
-          name.toLowerCase().includes('wi-fi') ||
-          name.toLowerCase().includes('wlan') ||
-          name.toLowerCase().includes('eth') ||
-          name.toLowerCase().includes('en')
-        ) {
-          preferred.push(config.address);
-        }
-      }
-    }
-  }
-  if (preferred.length > 0) return preferred[0];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+}));
 
-  for (const iface of Object.values(interfaces)) {
-    for (const config of iface) {
-      if (config.family === 'IPv4' && !config.internal) {
-        return config.address;
-      }
-    }
-  }
-  return '0.0.0.0';
-}
-
-const localIp = getLocalIp();
-const io = socketIo(server, {
-  cors: {
-    origin: `http://${localIp}:5173`,
-    methods: ['GET', 'POST'],
-    credentials: true,
-  }
-});
-
-const devices = new Map();
-
-app.use(cors());
 app.use(express.json());
 
-app.get('/api/ip', (req, res) => {
-  res.json({ ip: localIp });
-});
+// === In-memory Device Store ===
+const devices = new Map();
 
-app.get('/api/network-info', (req, res) => {
-  res.json({ ip: localIp });
+// === Socket.IO Setup ===
+const io = socketIo(server, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
 });
 
 io.on('connection', (socket) => {
-  console.log('New socket connected:', socket.id);
+  console.log('🟢 Socket connected:', socket.id);
 
   socket.on('register-device', ({ deviceId, username }) => {
-    console.log(`Device registered: ${username} (${deviceId})`);
+    console.log(`📱 Registered: ${username} (${deviceId})`);
     devices.set(deviceId, { socketId: socket.id, username, deviceId });
     io.emit('active-devices', Array.from(devices.values()));
   });
@@ -111,14 +79,17 @@ io.on('connection', (socket) => {
       }
     }
     io.emit('active-devices', Array.from(devices.values()));
+    console.log('🔴 Disconnected:', socket.id);
   });
 });
 
-const PORT = 3000;
-server.listen(PORT, localIp, () => {
-  console.log(`🚀 Server running on:
-  - Local: http://localhost:${PORT}
-  - Network: http://${localIp}:${PORT}`);
-  
-  console.log(`\nQR Code should point to: http://${localIp}:${PORT}`);
+// === Routes (Optional health check) ===
+app.get('/', (req, res) => {
+  res.send('🌍 DropMesh backend is running');
+});
+
+// === Server Listen on 0.0.0.0 ===
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
